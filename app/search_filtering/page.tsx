@@ -1,7 +1,7 @@
-"use client"
+'use client'
 
 import React, { useState, useMemo } from 'react';
-import { Search, Filter, X, Star, MapPin, DollarSign, Calendar } from 'lucide-react';
+import { Search, Filter, X, Star, MapPin, DollarSign, Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
 
 // Type definitions
 interface Product {
@@ -28,6 +28,15 @@ interface FilterState {
   selectedLocation: string;
   sortBy: SortField;
   sortOrder: SortOrder;
+}
+
+interface PaginationInfo {
+  currentPage: number;
+  totalPages: number;
+  totalItems: number;
+  itemsPerPage: number;
+  startIndex: number;
+  endIndex: number;
 }
 
 const SearchFilterApp: React.FC = () => {
@@ -140,6 +149,10 @@ const SearchFilterApp: React.FC = () => {
   const [sortBy, setSortBy] = useState<SortField>('name');
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
 
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [itemsPerPage, setItemsPerPage] = useState<number>(6);
+
   // Get unique values for filter options
   const categories = useMemo<string[]>(() => [...new Set(products.map(p => p.category))], [products]);
   const locations = useMemo<string[]>(() => [...new Set(products.map(p => p.location))], [products]);
@@ -148,14 +161,14 @@ const SearchFilterApp: React.FC = () => {
   const filteredProducts = useMemo<Product[]>(() => {
     let filtered = products.filter((product: Product) => {
       const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           product.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           product.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()));
-      
+        product.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        product.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()));
+
       const matchesCategory = !selectedCategory || product.category === selectedCategory;
       const matchesPrice = product.price >= priceRange[0] && product.price <= priceRange[1];
       const matchesRating = product.rating >= minRating;
       const matchesLocation = !selectedLocation || product.location === selectedLocation;
-      
+
       return matchesSearch && matchesCategory && matchesPrice && matchesRating && matchesLocation;
     });
 
@@ -163,12 +176,12 @@ const SearchFilterApp: React.FC = () => {
     filtered.sort((a: Product, b: Product) => {
       let aValue: string | number = a[sortBy];
       let bValue: string | number = b[sortBy];
-      
+
       if (typeof aValue === 'string' && typeof bValue === 'string') {
         aValue = aValue.toLowerCase();
         bValue = bValue.toLowerCase();
       }
-      
+
       if (sortOrder === 'asc') {
         return aValue > bValue ? 1 : -1;
       } else {
@@ -179,6 +192,28 @@ const SearchFilterApp: React.FC = () => {
     return filtered;
   }, [products, searchTerm, selectedCategory, priceRange, minRating, selectedLocation, sortBy, sortOrder]);
 
+  // Pagination calculations
+  const paginationInfo = useMemo<PaginationInfo>(() => {
+    const totalItems = filteredProducts.length;
+    const totalPages = Math.ceil(totalItems / itemsPerPage);
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = Math.min(startIndex + itemsPerPage, totalItems);
+
+    return {
+      currentPage,
+      totalPages,
+      totalItems,
+      itemsPerPage,
+      startIndex,
+      endIndex
+    };
+  }, [filteredProducts.length, currentPage, itemsPerPage]);
+
+  // Get current page products
+  const currentPageProducts = useMemo<Product[]>(() => {
+    return filteredProducts.slice(paginationInfo.startIndex, paginationInfo.endIndex);
+  }, [filteredProducts, paginationInfo.startIndex, paginationInfo.endIndex]);
+
   // Clear all filters
   const clearFilters = (): void => {
     setSearchTerm('');
@@ -188,6 +223,7 @@ const SearchFilterApp: React.FC = () => {
     setSelectedLocation('');
     setSortBy('name');
     setSortOrder('asc');
+    setCurrentPage(1); // Reset to first page when clearing filters
   };
 
   const activeFiltersCount = useMemo<number>(() => {
@@ -204,26 +240,81 @@ const SearchFilterApp: React.FC = () => {
     const newRange: [number, number] = [...priceRange];
     newRange[index] = value;
     setPriceRange(newRange);
+    setCurrentPage(1); // Reset to first page when filters change
   };
 
   const handleRatingClick = (star: number): void => {
     setMinRating(star === minRating ? 0 : star);
+    setCurrentPage(1); // Reset to first page when filters change
   };
 
   const handleSortChange = (e: React.ChangeEvent<HTMLSelectElement>): void => {
     setSortBy(e.target.value as SortField);
+    setCurrentPage(1); // Reset to first page when sorting changes
   };
 
   const handleCategoryChange = (e: React.ChangeEvent<HTMLSelectElement>): void => {
     setSelectedCategory(e.target.value);
+    setCurrentPage(1); // Reset to first page when filters change
   };
 
   const handleLocationChange = (e: React.ChangeEvent<HTMLSelectElement>): void => {
     setSelectedLocation(e.target.value);
+    setCurrentPage(1); // Reset to first page when filters change
   };
 
   const toggleSortOrder = (): void => {
     setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    setCurrentPage(1); // Reset to first page when sorting changes
+  };
+
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
+    setSearchTerm(e.target.value);
+    setCurrentPage(1); // Reset to first page when search changes
+  };
+
+  const handleItemsPerPageChange = (e: React.ChangeEvent<HTMLSelectElement>): void => {
+    setItemsPerPage(parseInt(e.target.value));
+    setCurrentPage(1); // Reset to first page when items per page changes
+  };
+
+  // Pagination handlers
+  const goToPage = (page: number): void => {
+    if (page >= 1 && page <= paginationInfo.totalPages) {
+      setCurrentPage(page);
+    }
+  };
+
+  const goToPreviousPage = (): void => {
+    if (currentPage > 1) {
+      setCurrentPage(currentPage - 1);
+    }
+  };
+
+  const goToNextPage = (): void => {
+    if (currentPage < paginationInfo.totalPages) {
+      setCurrentPage(currentPage + 1);
+    }
+  };
+
+  // Generate page numbers for pagination
+  const getPageNumbers = (): number[] => {
+    const totalPages = paginationInfo.totalPages;
+    const current = currentPage;
+    const delta = 2; // Number of pages to show on each side of current page
+
+    let start = Math.max(1, current - delta);
+    let end = Math.min(totalPages, current + delta);
+
+    // Adjust if we're near the beginning or end
+    if (current <= delta + 1) {
+      end = Math.min(totalPages, delta * 2 + 1);
+    }
+    if (current >= totalPages - delta) {
+      start = Math.max(1, totalPages - delta * 2);
+    }
+
+    return Array.from({ length: end - start + 1 }, (_, i) => start + i);
   };
 
   return (
@@ -266,7 +357,7 @@ const SearchFilterApp: React.FC = () => {
                   <input
                     type="text"
                     value={searchTerm}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
+                    onChange={handleSearchChange}
                     placeholder="Search products..."
                     className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
@@ -301,7 +392,7 @@ const SearchFilterApp: React.FC = () => {
                     min="0"
                     max="500"
                     value={priceRange[0]}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => 
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                       handlePriceRangeChange(0, parseInt(e.target.value))
                     }
                     className="w-full accent-blue-500"
@@ -311,7 +402,7 @@ const SearchFilterApp: React.FC = () => {
                     min="0"
                     max="500"
                     value={priceRange[1]}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => 
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                       handlePriceRangeChange(1, parseInt(e.target.value))
                     }
                     className="w-full accent-blue-500"
@@ -367,14 +458,28 @@ const SearchFilterApp: React.FC = () => {
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0">
                 <div>
                   <h3 className="text-lg font-semibold text-gray-800">
-                    {filteredProducts.length} Results Found
+                    {paginationInfo.totalItems} Results Found
                   </h3>
                   <p className="text-sm text-gray-600">
-                    Showing the best matches for your search
+                    Showing {paginationInfo.startIndex + 1}-{paginationInfo.endIndex} of {paginationInfo.totalItems} results
                   </p>
                 </div>
-                
+
                 <div className="flex items-center space-x-4">
+                  <div className="flex items-center space-x-2">
+                    <label className="text-sm text-gray-600">Show:</label>
+                    <select
+                      value={itemsPerPage}
+                      onChange={handleItemsPerPageChange}
+                      className="p-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value={6}>6</option>
+                      <option value={12}>12</option>
+                      <option value={24}>24</option>
+                      <option value={48}>48</option>
+                    </select>
+                  </div>
+
                   <select
                     value={sortBy}
                     onChange={handleSortChange}
@@ -385,7 +490,7 @@ const SearchFilterApp: React.FC = () => {
                     <option value="rating">Sort by Rating</option>
                     <option value="date">Sort by Date</option>
                   </select>
-                  
+
                   <button
                     onClick={toggleSortOrder}
                     className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 focus:ring-2 focus:ring-blue-500"
@@ -399,7 +504,7 @@ const SearchFilterApp: React.FC = () => {
 
             {/* Products Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-              {filteredProducts.map((product: Product) => (
+              {currentPageProducts.map((product: Product) => (
                 <div key={product.id} className="bg-white rounded-xl shadow-lg overflow-hidden hover:shadow-xl transition-shadow duration-300">
                   <div className="p-6">
                     <div className="flex items-start justify-between mb-4">
@@ -408,32 +513,32 @@ const SearchFilterApp: React.FC = () => {
                         {product.category}
                       </span>
                     </div>
-                    
+
                     <h3 className="text-xl font-semibold text-gray-800 mb-2">{product.name}</h3>
                     <p className="text-gray-600 text-sm mb-4">{product.description}</p>
-                    
+
                     <div className="space-y-2 mb-4">
                       <div className="flex items-center text-sm text-gray-600">
                         <DollarSign size={16} className="mr-1" />
                         <span className="font-semibold text-green-600">${product.price}</span>
                       </div>
-                      
+
                       <div className="flex items-center text-sm text-gray-600">
                         <Star size={16} className="mr-1 text-yellow-500" fill="currentColor" />
                         <span>{product.rating}</span>
                       </div>
-                      
+
                       <div className="flex items-center text-sm text-gray-600">
                         <MapPin size={16} className="mr-1" />
                         <span>{product.location}</span>
                       </div>
-                      
+
                       <div className="flex items-center text-sm text-gray-600">
                         <Calendar size={16} className="mr-1" />
                         <span>{new Date(product.date).toLocaleDateString()}</span>
                       </div>
                     </div>
-                    
+
                     <div className="flex flex-wrap gap-1 mb-4">
                       {product.tags.map((tag: string) => (
                         <span key={tag} className="bg-gray-100 text-gray-700 text-xs px-2 py-1 rounded">
@@ -441,8 +546,8 @@ const SearchFilterApp: React.FC = () => {
                         </span>
                       ))}
                     </div>
-                    
-                    <button 
+
+                    <button
                       className="w-full bg-gradient-to-r from-blue-500 to-indigo-600 text-white py-2 px-4 rounded-lg hover:from-blue-600 hover:to-indigo-700 transition-colors duration-200 font-medium"
                       type="button"
                     >
@@ -452,6 +557,62 @@ const SearchFilterApp: React.FC = () => {
                 </div>
               ))}
             </div>
+
+            {/* Pagination */}
+            {paginationInfo.totalPages > 1 && (
+              <div className="bg-white rounded-xl shadow-lg p-4 mt-6">
+                <div className="flex flex-col sm:flex-row justify-between items-center space-y-4 sm:space-y-0">
+                  <div className="text-sm text-gray-600">
+                    Page {currentPage} of {paginationInfo.totalPages}
+                  </div>
+
+                  <div className="flex items-center space-x-2">
+                    {/* Previous button */}
+                    <button
+                      onClick={goToPreviousPage}
+                      disabled={currentPage === 1}
+                      className="flex items-center px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 hover:text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      type="button"
+                    >
+                      <ChevronLeft size={16} className="mr-1" />
+                      Previous
+                    </button>
+
+                    {/* Page numbers */}
+                    <div className="flex items-center space-x-1">
+                      {getPageNumbers().map((pageNum: number) => (
+                        <button
+                          key={pageNum}
+                          onClick={() => goToPage(pageNum)}
+                          className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${pageNum === currentPage
+                              ? 'bg-blue-500 text-white'
+                              : 'text-gray-700 bg-white border border-gray-300 hover:bg-gray-50'
+                            }`}
+                          type="button"
+                        >
+                          {pageNum}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Next button */}
+                    <button
+                      onClick={goToNextPage}
+                      disabled={currentPage === paginationInfo.totalPages}
+                      className="flex items-center px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 hover:text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      type="button"
+                    >
+                      Next
+                      <ChevronRight size={16} className="ml-1" />
+                    </button>
+                  </div>
+
+                  <div className="text-sm text-gray-600">
+                    {paginationInfo.totalItems} total items
+                  </div>
+                </div>
+              </div>
+            )}
 
             {filteredProducts.length === 0 && (
               <div className="bg-white rounded-xl shadow-lg p-12 text-center">
